@@ -1,4 +1,5 @@
-@Library('massyl-shared-library') _
+@Library('massyl-shared-library')_
+
 pipeline {
     environment {
         IMAGE_NAME = "webapp"

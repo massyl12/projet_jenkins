@@ -49,27 +49,28 @@ pipeline {
             steps {
                 script {
                     timeout(time: 30, unit: 'MINUTES') {
-                        input message: 'Déployer Review ?', ok: 'Yes'
+                    input message: 'Déployer Review ?', ok: 'Yes'
                     }
                     sshagent(['key-pair']) {
-                        // 1️⃣ Installer Docker via Ansible
-                        sh """
-                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit review
-                        """
+                    // 1️⃣ Installer Docker via Ansible
+                    sh """
+                    ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit review
+                    """
 
-                        // 2️⃣ Déployer le conteneur
-                        sh '''
-                        echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                        ansible -i $INVENTORY_FILE review -a '
-                            docker rm -f $IMAGE_NAME || true &&
-                            docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG &&
-                            docker run -d -p $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                        ' -b
-                        '''
-                    }
-                }
+                    // 2️⃣ Déployer le conteneur
+                    sh """
+                    echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+                    ansible -i ${INVENTORY_FILE} review -b -a '
+                        docker rm -f ${IMAGE_NAME} || true && \
+                        docker pull ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} && \
+                        docker run -d -p ${HOST_PORT}:${CONTAINER_PORT} --name ${IMAGE_NAME} ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
+                    '
+                """
             }
         }
+    }
+}
+
 
         // ===================================
         // DEPLOY STAGING

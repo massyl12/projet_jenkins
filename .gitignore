@@ -1,1 +1,13 @@
+# Fichiers sensibles AWS
+.aws/
+~/aws/
 *.pem
+*.key
+*.tfstate
+*.tfstate.backup
+.terraform/
+terraform.tfstate.d/
+*.pub
+aws/
+terraform_*
+awscliv*

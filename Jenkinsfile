@@ -9,114 +9,123 @@ pipeline {
         HOST_PORT = 80
         CONTAINER_PORT = 80
         IP_DOCKER = '172.17.0.1'
+        INVENTORY_FILE = "inventory"
     }
+
     agent any
+
     stages {
         stage('Build') {
             steps {
-                script {
-                    sh "docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                }
+                sh "docker build --no-cache -t ${IMAGE_NAME}:${IMAGE_TAG} ."
             }
         }
+
         stage('Test') {
             steps {
-                script {
-                    sh '''
-                    docker run --rm -dp $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $IMAGE_NAME:$IMAGE_TAG
-                    sleep 5
-                    curl -I http://$IP_DOCKER
-                    sleep 5
-                    docker stop $IMAGE_NAME
-                    '''
-                }
+                sh '''
+                docker run --rm -dp $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $IMAGE_NAME:$IMAGE_TAG
+                sleep 5
+                curl -I http://$IP_DOCKER
+                docker stop $IMAGE_NAME
+                '''
             }
         }
+
         stage('Release') {
             steps {
-                script {
-                    sh '''
-                    docker tag $IMAGE_NAME:$IMAGE_TAG $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                    echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                    docker push $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
-                    '''
-                }
+                sh '''
+                docker tag $IMAGE_NAME:$IMAGE_TAG $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+                docker push $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                '''
             }
         }
+
+        // ===================================
+        // DEPLOY REVIEW
+        // ===================================
         stage('Deploy Review') {
-            environment {
-                SERVER_IP = '13.61.4.225'
-                SERVER_USERNAME = "ubuntu"
-            }
             steps {
                 script {
                     timeout(time: 30, unit: 'MINUTES') {
-                        input message: 'Voulez-vous réaliser le déploiement Review ?', ok: 'yes'
+                        input message: 'Déployer Review ?', ok: 'Yes'
                     }
                     sshagent(['key-pair']) {
+                        // 1️⃣ Installer Docker via Ansible
+                        sh """
+                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit review
+                        """
+
+                        // 2️⃣ Déployer le conteneur
                         sh '''
                         echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker rm -f $IMAGE_NAME || echo 'All deleted'"
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG || echo 'image downloaded'"
-                        sleep 30
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker run --rm -dp $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
-                        sleep 5
-                        curl -I http://$SERVER_IP:$HOST_PORT
+                        ansible -i $INVENTORY_FILE review -a "
+                            docker rm -f $IMAGE_NAME || true &&
+                            docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG &&
+                            docker run -d -p $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                        " -b
                         '''
                     }
                 }
             }
         }
+
+        // ===================================
+        // DEPLOY STAGING
+        // ===================================
         stage('Deploy Staging') {
-            environment {
-                SERVER_IP = '13.60.243.151'
-                SERVER_USERNAME = "ubuntu"
-            }
             steps {
                 script {
                     timeout(time: 30, unit: 'MINUTES') {
-                        input message: 'Voulez-vous réaliser le déploiement Staging ?', ok: 'yes'
+                        input message: 'Déployer Staging ?', ok: 'Yes'
                     }
                     sshagent(['key-pair']) {
+                        sh """
+                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit staging
+                        """
+
                         sh '''
                         echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker rm -f $IMAGE_NAME || echo 'All deleted'"
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG || echo 'image downloaded'"
-                        sleep 30
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker run --rm -dp $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
-                        sleep 5
-                        curl -I http://$SERVER_IP:$HOST_PORT
+                        ansible -i $INVENTORY_FILE staging -a "
+                            docker rm -f $IMAGE_NAME || true &&
+                            docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG &&
+                            docker run -d -p $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                        " -b
                         '''
                     }
                 }
             }
         }
+
+        // ===================================
+        // DEPLOY PROD
+        // ===================================
         stage('Deploy Prod') {
-            // when(expression{GIT_BRANCH == 'main'})
-            environment {
-                SERVER_IP = '13.60.42.100'
-                SERVER_USERNAME = "ubuntu"
-            }
             steps {
                 script {
                     timeout(time: 30, unit: 'MINUTES') {
-                        input message: 'Voulez-vous réaliser le déploiement Prod ?', ok: 'yes'
+                        input message: 'Déployer Prod ?', ok: 'Yes'
                     }
                     sshagent(['key-pair']) {
+                        sh """
+                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit prod
+                        """
+
                         sh '''
                         echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker rm -f $IMAGE_NAME || echo 'All deleted'"
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG || echo 'image downloaded'"
-                        sleep 30
-                        ssh -o StrictHostKeyChecking=no -l $SERVER_USERNAME $SERVER_IP "docker run --rm -dp $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG"
-                        sleep 5
-                        curl -I http://$SERVER_IP:$HOST_PORT
+                        ansible -i $INVENTORY_FILE prod -a "
+                            docker rm -f $IMAGE_NAME || true &&
+                            docker pull $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG &&
+                            docker run -d -p $HOST_PORT:$CONTAINER_PORT --name $IMAGE_NAME $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+                        " -b
                         '''
                     }
                 }
             }
         }
     }
+
     post {
         always {
             script {

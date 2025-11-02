@@ -2,33 +2,52 @@
 - name: Installation de Docker sur les serveurs AWS
   hosts: all
   become: yes
-
   tasks:
+
     - name: Mettre à jour les paquets
       apt:
         update_cache: yes
+        force_apt_get: yes
 
-    - name: Installer les dépendances Docker
+    - name: Installer les dépendances
       apt:
         name:
           - apt-transport-https
           - ca-certificates
           - curl
-          - software-properties-common
+          - gnupg
+          - lsb-release
         state: present
 
-    - name: Ajouter le dépôt Docker
-      apt_repository:
-        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
-        state: present
+    - name: Ajouter la clé GPG officielle de Docker
+      ansible.builtin.shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        chmod a+r /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
 
-    - name: Installer Docker CE
+    - name: Ajouter le dépôt Docker officiel
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/docker.list
+        content: |
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable
+
+    - name: Mettre à jour la liste des paquets
       apt:
-        name: docker-ce
-        state: present
         update_cache: yes
 
-    - name: Activer et démarrer Docker
+    - name: Installer Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: S'assurer que Docker est démarré
       service:
         name: docker
         state: started

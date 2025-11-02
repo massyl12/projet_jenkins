@@ -54,7 +54,7 @@ pipeline {
                     sshagent(['key-pair']) {
                     // 1️⃣ Installer Docker via Ansible
                     sh """
-                    ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit review
+                    ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit review --ssh-extra-args='-o StrictHostKeyChecking=no
                     """
 
                     // 2️⃣ Déployer le conteneur
@@ -83,7 +83,7 @@ pipeline {
                     }
                     sshagent(['key-pair']) {
                         sh """
-                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit staging
+                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit staging --ssh-extra-args='-o StrictHostKeyChecking=no
                         """
 
                         sh '''
@@ -110,7 +110,7 @@ pipeline {
                     }
                     sshagent(['key-pair']) {
                         sh """
-                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit prod
+                        ansible-playbook -i ${INVENTORY_FILE} install_docker.yml --limit prod --ssh-extra-args='-o StrictHostKeyChecking=no
                         """
 
                         sh '''

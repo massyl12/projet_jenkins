@@ -60,7 +60,7 @@ pipeline {
                     // 2️⃣ Déployer le conteneur
                     sh """
                     echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
-                    ansible -i ${INVENTORY_FILE} review -b -a '
+                    ansible -i ${INVENTORY_FILE} review -b -m shell -a '
                         docker rm -f ${IMAGE_NAME} || true && \
                         docker pull ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} && \
                         docker run -d -p ${HOST_PORT}:${CONTAINER_PORT} --name ${IMAGE_NAME} ${DOCKER_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}
